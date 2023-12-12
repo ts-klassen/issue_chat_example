@@ -4,8 +4,11 @@
   {registered, []},
   {mod, {issue_chat_example_app, []}},
   {applications,
-   [kernel,
-    stdlib
+   [kernel
+  , stdlib
+  , jobpq
+  , ghwhk
+  , gpte
    ]},
   {env,[]},
   {modules, []},
