@@ -6,7 +6,6 @@
       , on_comment_create_webhook_worker/0
       , run_worker/0
     ]).
--export([on/1, on_comment_create_webhook/0]).
 
 on_issue_open_webhook_worker() ->
     {ok, spawn_link(fun on_issue_open_webhook_loop/0)}.
