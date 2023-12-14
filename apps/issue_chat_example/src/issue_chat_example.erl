@@ -52,7 +52,7 @@ on({issue_open, Issue0}) ->
     {value, Title} = ghwhk_issues:title(Issue0),
     {value, Body} = ghwhk_issues:body(Issue0),
     System = <<"Github Issue Number: ", Number/binary, "\nGithub Issue Title: ", Title/binary>>,
-    Chat0 = new_chat(),
+    Chat0 = new_chat(Issue0),
     Chat1 = chat_gpte:system(System, Chat0),
     {Res, _Chat2} = chat_gpte:ask(Body, Chat1),
     Comment0 = ghwhk_comments:new(Issue0),
@@ -67,9 +67,10 @@ on({comment_create, Comment0}) ->
     [Message|Messages] = comments_to_messages(Issue2),
     case Message of
         {user, Body} ->
-            Chat0 = new_chat(),
+            Chat0 = new_chat(Issue2),
             Chat1 = chat_gpte:messages(Messages, Chat0),
-            {Res, _Chat2} = chat_gpte:ask(Body, Chat1),
+            {Res, Chat2} = chat_gpte:ask(Body, Chat1),
+            io:format("~p~n", [Chat2]),
             Comment1 = ghwhk_comments:new(Issue2),
             Comment2 = ghwhk_comments:body(Res, Comment1),
             ghwhk_comments:create(Comment2),
@@ -79,8 +80,88 @@ on({comment_create, Comment0}) ->
     end.
 
 
-new_chat() ->
-    chat_gpte:new().
+new_chat(Issue) ->
+    Chat0 = chat_gpte:new(),
+    Chat1 = chat_gpte:function(gpte_functions:new(
+        get_issue
+      , <<"get messages from github issue.">>
+      , fun(#{issue_number:=Number}, _State) ->
+            Issue0 = ghwhk_issues:new(Issue),
+            Issue1 = ghwhk_issues:number(Number, Issue0),
+            Issue2 = ghwhk_issues:get(Issue1),
+            Messages0 = comments_to_messages(Issue2),
+            Messages1 = lists:map(fun({R,C})->#{
+                role => R
+              , content => C
+            }end, Messages0),
+            jsone:encode(#{
+                messages => Messages1
+            })
+        end
+      , [{
+            integer
+          , issue_number
+          , <<"issue number">>
+          , true
+        }]
+    ), Chat0),
+    Chat2 = chat_gpte:function(gpte_functions:new(
+        post_issue
+      , <<"oepn a new github issue.">>
+      , fun(#{title:=Title, body:=Body}, _State) ->
+            Issue0 = ghwhk_issues:new(Issue),
+            Issue1 = ghwhk_issues:title(Title, Issue0),
+            Issue2 = ghwhk_issues:body(Body, Issue1),
+            Issue3 = ghwhk_issues:create(Issue2),
+            {value, Number} = ghwhk_issues:number(Issue3),
+            jsone:encode(#{
+                issue_number => Number
+            })
+        end
+      , [
+            {
+                string
+              , title
+              , <<"issue title">>
+              , true
+            }
+          , {
+                string
+              , body
+              , <<"issue body">>
+              , true
+            }
+        ]
+    ), Chat1),
+    Chat3 = chat_gpte:function(gpte_functions:new(
+        get_file
+      , <<"view file on repository.">>
+      , fun(Args=#{file_path:=Path}, _State) ->
+            Branch = case klsn_map:lookup([branch], Args) of
+                {value, Value} -> Value;
+                none -> <<"main">>
+            end,
+            Url = <<"https://raw.githubusercontent.com/ts-klassen/supdls/", Branch/binary, "/", Path/binary>>,
+            Res0 = httpc:request(get, {Url, []}, [], [{body_format, binary}]),
+            {ok, {{_,200,_}, _, Res1}} = Res0,
+            Res1
+        end
+      , [
+            {
+                string
+              , branch
+              , <<"branch name. on default: `main`.">>
+              , false
+            }
+          , {
+                string
+              , file_path
+              , <<"file path from repository root.">>
+              , true
+            }
+        ]
+    ), Chat2),
+    Chat3.
 
 -spec comments_to_messages(
         ghwhk_issues:issue()
