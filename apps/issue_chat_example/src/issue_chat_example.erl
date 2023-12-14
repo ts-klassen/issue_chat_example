@@ -70,7 +70,6 @@ on({comment_create, Comment0}) ->
             Chat0 = new_chat(Issue2),
             Chat1 = chat_gpte:messages(Messages, Chat0),
             {Res, Chat2} = chat_gpte:ask(Body, Chat1),
-            io:format("~p~n", [Chat2]),
             Comment1 = ghwhk_comments:new(Issue2),
             Comment2 = ghwhk_comments:body(Res, Comment1),
             ghwhk_comments:create(Comment2),
